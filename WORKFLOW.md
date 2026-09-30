@@ -54,72 +54,64 @@ Explanation  Recommendation
 
 ---
 
-## Pipeline Stages
+## Pipeline Stages & Status
 
-### 1. Data Source — CIC-IDS2017
+### 1. Data Source — CIC-IDS2017 `[COMPLETE]`
 Labeled network traffic dataset containing benign and attack flows (DoS, DDoS, port scans, brute force, botnet, infiltration, etc.), each represented as a row of ~80 statistical flow features (packet lengths, flow duration, byte rates, flag counts, etc.).
 
-### 2. Data Preprocessing
-Raw flow data requires cleanup before modeling:
-- Remove NaN/null rows (common due to malformed flows)
-- Remove Inf/-Inf values (division-based features like `Flow Bytes/s` can blow up when duration = 0)
-- Remove duplicate rows (known duplication issue in CIC-IDS2017 — important to fix to avoid train/test leakage)
-- Encode labels (attack type strings → integers)
+### 2. Data Preprocessing (`preprocessing/preprocessing.py`) `[COMPLETE]`
+Raw flow data cleanup:
+- Stripped space-padded column names
+- Cleaned NaN, null, and Inf values
+- Deduplication of flow rows
+- Label encoding of attack classes (15 classes, including `BENIGN`)
 
-### 3. Feature Preparation
-- `X` = network flow features (numeric)
+### 3. Feature Preparation (`X`, `y`) `[COMPLETE]`
+- `X` = network flow features (numeric tabular data, 78 features)
 - `y` = attack label (encoded)
 
-### 4. 80/20 Train/Test Split
-Standard split for evaluating generalization. Recommend **stratifying on `y`** since CIC-IDS2017 is heavily class-imbalanced (benign traffic dominates).
+### 4. 80/20 Stratified Split `[COMPLETE]`
+- Settled on **stratified split on `y`** to preserve class distribution across imbalanced attack classes.
 
-### 5. Model Training
+### 5. Model Training (`models/train.py`) `[COMPLETE]`
 Two models trained in parallel for comparison:
+- **Random Forest**: Bagged decision trees
+- **XGBoost**: Gradient-boosted decision trees
 
-| Model | Notes |
-|---|---|
-| **Random Forest** | Bagged decision trees, robust baseline, less prone to overfitting |
-| **XGBoost** | Gradient-boosted trees, typically stronger on imbalanced tabular data, integrates efficiently with SHAP's `TreeExplainer` |
+### 6. Model Evaluation (`models/evaluate.py`) `[COMPLETE]`
+Evaluation on held-out 20% test set:
+- Accuracy, Precision, Recall, F1-score, Confusion Matrix, ROC-AUC.
+- Full per-class evaluation saved to `models/saved_models/evaluation_report.md`.
 
-### 6. Model Evaluation
-Metrics computed for both models:
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- Confusion Matrix
-- ROC-AUC
+### 7. Best Model Selection (`models/model_selection.py`) `[COMPLETE]`
+- Evaluated with composite metric: **60% Weighted Recall + 40% Weighted F1** (prioritizing recall as missed attacks are costlier than false alarms).
+- **Best Model Selected**: XGBoost (~99.9% weighted recall, ~99.9% weighted F1).
 
-> **Note:** For IDS use cases, prioritize **Recall** — missed attacks (false negatives) are more costly than false alarms.
+### 8. Prediction (`models/predict.py`) `[COMPLETE]`
+- Validates input features against `feature_columns.json`.
+- Outputs predicted attack class + confidence probability.
 
-### 7. Best Model Selection
-Select the stronger model based on evaluation criteria above, with justification (e.g., best F1/Recall tradeoff, or best SHAP compatibility).
+### 9. SHAP Explainability Layer (`explainability/explain.py`) `[COMPLETE]`
+- Exact `TreeExplainer` computed per prediction.
+- Identifies features pushing toward or away from the predicted class.
 
-### 8. Prediction
-Selected model outputs, for a new/unseen flow:
-- Predicted attack class
-- Prediction probability/confidence
+### 10. Top Contributing Features `[COMPLETE]`
+- Computes top-$k$ (default 5) features with their magnitude and direction (`TOWARD` vs `AWAY`).
+- Encapsulated in `predict_and_explain()`.
 
-### 9. SHAP (Explainability Layer)
-Computes per-prediction feature attributions — which features pushed this specific flow toward its predicted class, and by how much. Converts the black-box prediction into an auditable decision.
+### 11. RAG Knowledge Retrieval (`rag/`) `[COMPLETE]`
+- **Knowledge Base**: 107 Markdown chunks (15 attack profiles, 14 mitigations, 78 feature glossaries).
+- **Index**: ChromaDB vector store (`axids_kb`), cosine distance, `all-MiniLM-L6-v2` ONNX embeddings (100% offline).
+- **Retriever (`rag/retriever.py`)**: Exact deterministic ID lookup with guarded semantic fallback (`MAX_DISTANCE=0.55`) and manifest staleness detection.
 
-### 10. Top Contributing Features
-Extract the highest-magnitude SHAP values for the prediction (e.g., `Flow Duration`, `Fwd Packet Length Mean`, `SYN Flag Count`) — the human-readable "why."
+### 12. LLM — Llama 3.2 via Ollama (`llm/`) `[COMPLETE]`
+- **Localhost Guarded Client (`llm/ollama_client.py`)**: Local HTTP wrapper around `http://localhost:11434/api/generate` with distinct `OllamaConnectionError`, `OllamaTimeoutError`, and `OllamaResponseError`.
+- **Two-Pass Prompting Architecture (`llm/prompts.py`)**:
+  - **Pass 1 (Explanation)**: Receives predicted class, confidence, top SHAP features (values & directions), and KB attack profile.
+  - **Pass 2 (Recommendation)**: Receives predicted class, severity, and KB mitigation playbook (SHAP features omitted to strictly ground mitigations in KB facts).
 
-### 11. RAG (Retrieval-Augmented Generation)
-Given the predicted class + top SHAP features, retrieve relevant domain knowledge from a knowledge base (attack definitions, feature significance, standard mitigations). Grounds the LLM's output in real security knowledge instead of letting it hallucinate.
-
-### 12. LLM — Llama 3.2 via Ollama
-Retrieved context + SHAP features + prediction are passed as a prompt to a locally-hosted LLM, generating:
-- **Explanation** — plain-English reasoning for the alert
-- **Recommendation** — actionable mitigation steps (e.g., block source IP, rate-limit SYN packets)
-
-### 13. Actionable Alert
-Final output combining:
-- Predicted class
-- Confidence score
-- SHAP-based reasoning
-- LLM-generated explanation + recommendation
+### 13. Actionable Alert JSON (`llm/alert_builder.py`) `[COMPLETE]`
+- `build_alert()` and `process_flow_to_alert()` synthesize ML predictions, SHAP attributions, RAG retrieval context, and LLM text into a standardized JSON SOC alert schema.
 
 ---
 
@@ -127,27 +119,35 @@ Final output combining:
 
 This is a **two-stage pipeline**:
 
-1. **Quantitative stage** (RF/XGBoost → SHAP) — accurate, but opaque
-2. **Qualitative stage** (RAG → LLM) — translates opaque numbers into human-actionable language
+1. **Quantitative stage** (XGBoost $\rightarrow$ SHAP) — accurate, high-speed, auditable
+2. **Qualitative stage** (RAG $\rightarrow$ Llama 3.2) — translates numerical attributions into human-actionable language
 
-This makes the system more than a classifier — it's classification + interpretability + action, suitable for real SOC (Security Operations Center) workflows where analysts need to understand and act on alerts quickly.
-
----
-
-## Tech Stack
-
-- **Dataset:** CIC-IDS2017
-- **ML Models:** Random Forest, XGBoost (scikit-learn / xgboost)
-- **Explainability:** SHAP
-- **Retrieval:** RAG (vector store + retriever, e.g., FAISS/Chroma)
-- **LLM:** Llama 3.2 (served locally via Ollama)
+This makes the system an end-to-end classification + interpretability + action system suitable for SOC workflows.
 
 ---
 
-## Open Questions / TODOs
+## Tech Stack & Current Status
 
-- [ ] Finalize class imbalance strategy (SMOTE, class weights, undersampling?)
-- [ ] Decide on stratification strategy for train/test split
-- [ ] Build/curate the RAG knowledge base (attack types, mitigations, MITRE ATT&CK mapping?)
-- [ ] Define prompt template for the LLM explanation/recommendation stage
-- [ ] Define alert output schema (JSON format for downstream SOC integration)
+| Layer | Technology | Status |
+|---|---|---|
+| **Dataset** | CIC-IDS2017 (Canadian Institute for Cybersecurity) | ✅ Complete |
+| **ML Models** | Random Forest, XGBoost (scikit-learn / xgboost) | ✅ Complete |
+| **Explainability** | SHAP (`TreeExplainer`) | ✅ Complete |
+| **Retrieval** | ChromaDB · 107 chunks · `all-MiniLM-L6-v2` ONNX (offline) | ✅ Complete |
+| **LLM** | Llama 3.2 via Ollama (localhost only, two-pass grounded prompts) | ✅ Complete |
+| **Alert Builder** | Standardized JSON Actionable Alert Schema | ✅ Complete |
+| **Tests** | 33 comprehensive unit, integration, and live E2E tests | ✅ 100% Pass |
+
+---
+
+## Milestone Status
+
+- [x] Preprocessing pipeline & data leakage audit (`check_leakage.py`)
+- [x] Stratified 80/20 train/test split & model training
+- [x] Evaluation & weighted recall model selection (XGBoost selected)
+- [x] SHAP TreeExplainer & `predict_and_explain()`
+- [x] Knowledge Base curation, validation (`validate_kb.py`), and ChromaDB index builder (`build_index.py`)
+- [x] KnowledgeRetriever with exact/semantic fallback and staleness detection
+- [x] Phase 4 LLM client (`llm/ollama_client.py`), two-pass prompts (`llm/prompts.py`), and alert builder (`llm/alert_builder.py`)
+- [x] Live Llama 3.2 integration test suite (`tests/test_llm.py` & `tests/test_rag.py`)
+

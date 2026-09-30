@@ -47,17 +47,23 @@ SHAP Explainability          explainability/explain.py
 Top Contributing Features
         │
         ▼
-RAG Knowledge Retrieval      rag/           [in progress]
+RAG Knowledge Retrieval      rag/           [complete]
+        │
+        │  kb_parser.py → validate_kb.py → build_index.py → retriever.py
+        │  ChromaDB  ·  107 chunks  ·  all-MiniLM-L6-v2 (offline)
         │
         ▼
-LLM — Llama 3.2 / Ollama     llm/           [in progress]
+LLM — Llama 3.2 / Ollama     llm/           [complete]
+        │
+        │  ollama_client.py → prompts.py → alert_builder.py
+        │  Two-pass grounded prompting · Localhost only
         │
    ┌────┴────┐
    ▼         ▼
 Explanation  Recommendation
    └────┬────┘
         ▼
-  Actionable Alert
+  Actionable Alert JSON
 ```
 
 See [`WORKFLOW.md`](WORKFLOW.md) for detailed design rationale for each stage.
@@ -102,7 +108,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Running the pipeline
+### Running the pipeline & tests
 
 ```bash
 # Step 1 — Train models (requires data/CICIDS2017_Combined.csv)
@@ -112,11 +118,14 @@ python -m models.train
 python -m models.evaluate
 python -m models.model_selection
 
-# Step 3 — Run the end-to-end integration test
+# Step 3 — Run the ML + SHAP integration test
 python test_pipeline.py
 
 # Step 4 — Run the data leakage audit
 python check_leakage.py
+
+# Step 5 — Run the full test suite (33 tests across RAG and LLM)
+python -m unittest discover tests
 ```
 
 > **Note:** Steps 1–2 take ~10–15 minutes on a modern CPU. Steps 3–4 each take
@@ -141,6 +150,15 @@ python check_leakage.py
 | Combined pipeline | `explainability/explain.py` | `predict_and_explain()` end-to-end function |
 | Integration test | `test_pipeline.py` | 5-sample mix from held-out test set, pass/fail table, edge-case check |
 | Leakage audit | `check_leakage.py` | Rounded-exact + cosine-proxy duplicate detection, per-class breakdown |
+| KB parser | `rag/kb_parser.py` | Parses 3 Markdown KB files into 107 normalized chunks |
+| KB validator | `rag/validate_kb.py` | Validates KB schema + alignment with trained model artifacts |
+| RAG index builder | `rag/build_index.py` | Embeds 107 chunks into ChromaDB (`axids_kb`), cosine distance, idempotent, manifest writer |
+| RAG retriever | `rag/retriever.py` | Exact lookup + guarded semantic fallback (`MAX_DISTANCE=0.55`), staleness detection, CLI demo |
+| RAG test suite | `tests/test_rag.py` | 22 tests: parser, validator, index, retriever, end-to-end pipeline — all passing |
+| Ollama client | `llm/ollama_client.py` | Robust localhost-guarded HTTP client with timeout/connection error hierarchy |
+| Grounded prompt templates | `llm/prompts.py` | Two-pass prompt formatters: Pass 1 (SHAP explanation), Pass 2 (KB-grounded mitigation) |
+| Actionable alert builder | `llm/alert_builder.py` | `build_alert()` + `process_flow_to_alert()` assembling structured SOC JSON alerts |
+| LLM test suite | `tests/test_llm.py` | 11 unit, mock, and live Llama 3.2 end-to-end tests — all passing |
 
 **Model performance** (XGBoost, held-out 20% test set):
 - Accuracy: ~99.9%  |  Weighted Recall: ~99.9%  |  Weighted F1: ~99.9%
@@ -150,25 +168,26 @@ python check_leakage.py
 - Rounded-exact leakage: 1.4% overall (sub-3dp precision noise, not true leakage)
 - Cosine-proxy similarity: 64.8% overall (reflects inherent repetitiveness of network traffic, not a data pipeline issue)
 
-### 🔲 In progress / pending
+**RAG details:**
+- 107 chunks: 15 attack profiles, 14 mitigations, 78 feature glossary entries
+- Embedding model: `all-MiniLM-L6-v2` ONNX (~90 MB, cached at `~/.cache/chroma/`, 100% offline after first run)
+- All 15 attack classes retrieve via exact match; semantic fallback guards against hallucination (`MAX_DISTANCE=0.55`)
 
-| Component | Notes |
-|---|---|
-| RAG knowledge base | `rag/` — vector store + retriever for attack definitions and mitigations |
-| LLM integration | `llm/` — Llama 3.2 via Ollama, prompt template, alert formatting |
-| Actionable alert output | Final JSON alert schema for SOC integration |
+**LLM details:**
+- Model: `llama3.2` running via local Ollama instance on `localhost:11434`
+- Structured two-pass JSON synthesis with automatic retry + exponential backoff
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Dataset | CIC-IDS-2017 (Canadian Institute for Cybersecurity) |
-| ML models | Random Forest, XGBoost (scikit-learn / xgboost) |
-| Explainability | SHAP (`TreeExplainer`) |
-| Retrieval | ChromaDB (RAG vector store) — pending |
-| LLM | Llama 3.2 via Ollama (local) — pending |
+| Layer | Technology | Status |
+|---|---|---|
+| Dataset | CIC-IDS-2017 (Canadian Institute for Cybersecurity) | ✅ |
+| ML models | Random Forest, XGBoost (scikit-learn / xgboost) | ✅ |
+| Explainability | SHAP (`TreeExplainer`) | ✅ |
+| Retrieval | ChromaDB · 107 chunks · `all-MiniLM-L6-v2` ONNX (offline) | ✅ |
+| LLM | Llama 3.2 via Ollama (local) | ✅ |
 
 ---
 
@@ -180,7 +199,7 @@ axids/
 │   └── README.md               # Download instructions for CIC-IDS2017
 ├── explainability/
 │   └── explain.py              # SHAP TreeExplainer + predict_and_explain()
-├── llm/                        # [pending] LLM prompt + generation
+├── llm/                        # [pending] LLM prompt + generation + alert assembly
 ├── models/
 │   ├── train.py                # Training pipeline
 │   ├── evaluate.py             # Evaluation metrics + reports
@@ -193,9 +212,22 @@ axids/
 ├── notebooks/                  # Exploratory notebooks (gitignored *.ipynb)
 ├── preprocessing/
 │   └── preprocessing.py        # Load → clean → encode pipeline
-├── rag/                        # [pending] ChromaDB vector retrieval
+├── rag/
+│   ├── kb_parser.py            # Markdown KB parser, normalize_key, extract_urls
+│   ├── validate_kb.py          # Schema + model artifact alignment validator
+│   ├── build_index.py          # ChromaDB index builder + manifest writer
+│   ├── retriever.py            # KnowledgeRetriever: exact lookup + semantic fallback
+│   ├── config.py               # Shared paths and constants (MAX_DISTANCE, etc.)
+│   ├── chroma_db/              # ChromaDB persistence dir (gitignored)
+│   ├── kb_manifest.json        # KB file hashes + chunk counts for staleness detection
+│   └── knowledge_base/         # Markdown KB source files
+│       ├── attack_profiles.md
+│       ├── mitigations.md
+│       └── feature_glossary.md
+├── tests/
+│   └── test_rag.py              # 22 unit, integration, and end-to-end RAG tests
 ├── check_leakage.py            # Data leakage audit script
-├── test_pipeline.py            # End-to-end integration test
+├── test_pipeline.py            # End-to-end integration test (models + SHAP)
 ├── requirements.txt
 └── WORKFLOW.md                 # Detailed pipeline design document
 ```

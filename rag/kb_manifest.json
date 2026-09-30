@@ -1,0 +1,19 @@
+{
+  "kb_hash": "0e156fa614f4693d5aee22e27abbe726fa441f93c055903b3481dc5c4864786f",
+  "file_hashes": {
+    "attack_profiles.md": "c1a0c431eb5851ffaa2754e79b190509e65d4acb0f87e937a843578a43299757",
+    "mitigations.md": "1bd5a287596d1f55870a967f79f426db15899f9422b1549c4f1598facc51b09c",
+    "feature_glossary.md": "a6a397a4ae51c004a08384d0e0a202e9bf78f8346de2790affccb2c504992555"
+  },
+  "chunk_count": 107,
+  "n_chunks": 107,
+  "doc_type_counts": {
+    "attack_profiles": 15,
+    "mitigations": 14,
+    "feature_glossary": 78
+  },
+  "chromadb_version": "1.5.9",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "include_mitre": true,
+  "built_at": "2026-09-30T05:39:46.629406+00:00"
+}
