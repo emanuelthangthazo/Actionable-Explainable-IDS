@@ -31,8 +31,9 @@ CIC-IDS2017 Raw Flows
   → models/predict.py                 (attack class + confidence)
   → explainability/explain.py         (SHAP TreeExplainer → top-k features w/ direction, predict_and_explain())
   → rag/                              [DONE] KB parser → validator → ChromaDB index → KnowledgeRetriever
-  → llm/                              [PENDING] Llama 3.2 via Ollama → explanation + recommendation
-  → Actionable Alert (JSON schema TBD)
+  → llm/                              [DONE] Llama 3.2 via Ollama → explanation + recommendation
+  → Actionable Alert (JSON schema defined & live)
+  → tools/triage_cli.py               [DONE] Interactive SOC triage dashboard (Rich UI)
 ```
 
 ## Current status — check here before assuming anything is undone
@@ -52,7 +53,9 @@ CIC-IDS2017 Raw Flows
 - `llm/ollama_client.py` — local HTTP wrapper around `POST /api/generate` with 3 distinct exception types (`OllamaConnectionError`, `OllamaTimeoutError`, `OllamaResponseError`)
 - `llm/prompts.py` — two grounded prompt formatters (Pass 1: Explanation with SHAP attributions, Pass 2: Recommendation grounded strictly in KB mitigations)
 - `llm/alert_builder.py` — `build_alert()` and `process_flow_to_alert()` assembles structured Actionable Alert JSON dictionary
-- `tests/test_llm.py` — 11 unit, integration, and live Llama 3.2 end-to-end tests (total 33 tests across full test suite)
+- `tests/test_llm.py` — 11 unit, integration, and live Llama 3.2 end-to-end tests
+- `tools/triage_cli.py` — interactive CLI triage tool using Rich for terminal UI, SHAP horizontal bar charts, and live flow inspection
+- `tests/test_triage_cli.py` — 4 unit and rendering tests (total 37 tests across full test suite)
 
 **RAG Index, Model Cache & Retriever:**
 - All 107 chunks indexed into ChromaDB collection `axids_kb` (`rag/chroma_db/`).

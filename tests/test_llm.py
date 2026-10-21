@@ -305,8 +305,64 @@ class TestEndToEndLLM(unittest.TestCase):
             print(f"Recommendation : {alert['alert']['recommendation']}")
             print(f"Actions (KB)   : {alert['alert']['mitigation_playbook']['actions'][:2]}")
 
-        print("\n" + "=" * 80)
+    def test_mixed_direction_feature_explanation_grounding(self):
+        """Verify LLM properly discriminates between TOWARD and AWAY features for a BENIGN flow.
+
+        Specifically verifies that an AWAY feature (e.g. suspicious Destination Port 4444)
+        is not erroneously claimed as 'supporting' or 'confirming' the benign prediction.
+        """
+        if not self.ollama_available:
+            self.skipTest("Ollama llama3.2 is not currently available for live inference.")
+
+        client = OllamaClient(timeout=30.0)
+        mixed_features = [
+            {"feature": "Total Length of Fwd Packets", "feature_value": 0.0, "shap_value": 1.45, "direction": "TOWARD"},
+            {"feature": "Destination Port", "feature_value": 4444.0, "shap_value": -1.10, "direction": "AWAY"},
+            {"feature": "Flow Duration", "feature_value": 1200.0, "shap_value": 0.85, "direction": "TOWARD"},
+        ]
+
+        user_prompt, sys_prompt = format_explanation_prompt(
+            attack_class="BENIGN",
+            confidence=0.92,
+            top_features=mixed_features,
+            profile_text="Normal benign network baseline traffic with standard application layer exchanges.",
+        )
+
+        resp = client.generate(prompt=user_prompt, system=sys_prompt, format_json=True)
+        self.assertIsInstance(resp, dict)
+        explanation = resp.get("explanation", "")
+        self.assertTrue(len(explanation) > 0, "LLM returned empty explanation")
+
+        print("\n" + "-" * 80)
+        print("  MIXED-DIRECTION EXPLANATION REVIEW (Pass 1 Grounding)")
+        print("-" * 80)
+        print(f"Generated Explanation:\n{explanation}")
+        print("-" * 80)
+
+        explanation_lower = explanation.lower()
+
+        # Contradiction checks:
+        # Destination Port was 'AWAY' (reduced benign confidence).
+        # It must NOT be described as supporting / confirming / indicating benign or normal traffic.
+        contradictory_phrases = [
+            "destination port supports",
+            "destination port confirms",
+            "destination port justifies",
+            "destination port indicates normal",
+            "destination port indicates benign",
+            "port 4444 supports",
+            "port 4444 confirms",
+            "port 4444 indicates normal",
+            "port 4444 indicates benign",
+        ]
+        for phrase in contradictory_phrases:
+            self.assertNotIn(
+                phrase,
+                explanation_lower,
+                f"Contradiction detected: LLM claimed AWAY feature supports classification with phrase '{phrase}'",
+            )
 
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,9 +1,9 @@
 {
-  "kb_hash": "0e156fa614f4693d5aee22e27abbe726fa441f93c055903b3481dc5c4864786f",
+  "kb_hash": "569970b1a1c4a46f53a0d5e1b71276b29c611d1266330fa33b448c09f00906dd",
   "file_hashes": {
-    "attack_profiles.md": "c1a0c431eb5851ffaa2754e79b190509e65d4acb0f87e937a843578a43299757",
-    "mitigations.md": "1bd5a287596d1f55870a967f79f426db15899f9422b1549c4f1598facc51b09c",
-    "feature_glossary.md": "a6a397a4ae51c004a08384d0e0a202e9bf78f8346de2790affccb2c504992555"
+    "attack_profiles.md": "f210810391e7c17f51676949cc096f2d3e5f85dfd22ce293085cbe602b95ff01",
+    "mitigations.md": "868bb31c2b910823a7ebf73742bcaa3bb96314550d1f84d22f05e5fe025f9a6b",
+    "feature_glossary.md": "3b535b04061d8de970aacdfcfdbcfe28031c7c566c3788f4105e28928c0f66ea"
   },
   "chunk_count": 107,
   "n_chunks": 107,
@@ -15,5 +15,5 @@
   "chromadb_version": "1.5.9",
   "embedding_model": "all-MiniLM-L6-v2",
   "include_mitre": true,
-  "built_at": "2026-09-30T05:39:46.629406+00:00"
+  "built_at": "2026-09-30T07:09:25.684228+00:00"
 }

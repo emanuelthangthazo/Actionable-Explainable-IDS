@@ -124,14 +124,23 @@ python test_pipeline.py
 # Step 4 — Run the data leakage audit
 python check_leakage.py
 
-# Step 5 — Run the full test suite (33 tests across RAG and LLM)
+# Step 5 — Run the full test suite (37 tests across RAG, LLM, and Triage CLI)
 python -m unittest discover tests
+
+# Step 6 — Run the Interactive SOC Alert Triage CLI Demo
+python -m tools.triage_cli --count 5
 ```
+
+> **Interactive Triage Commands:**
+> - `[n]`: Next flow
+> - `[d]`: Toggle detailed SHAP feature vector & raw KB context
+> - `[r]`: Dump raw pretty-printed Alert JSON
+> - `[q]`: Quit session
 
 > **Note:** Steps 1–2 take ~10–15 minutes on a modern CPU. Steps 3–4 each take
 > ~2 minutes (they re-read the CSV to reconstruct the test split without
 > retraining). Pre-trained model artifacts are included in `models/` so you
-> can run Step 3 immediately after cloning (no retraining needed).
+> can run Step 3 or Step 6 immediately after cloning (no retraining needed).
 
 ---
 
@@ -159,6 +168,8 @@ python -m unittest discover tests
 | Grounded prompt templates | `llm/prompts.py` | Two-pass prompt formatters: Pass 1 (SHAP explanation), Pass 2 (KB-grounded mitigation) |
 | Actionable alert builder | `llm/alert_builder.py` | `build_alert()` + `process_flow_to_alert()` assembling structured SOC JSON alerts |
 | LLM test suite | `tests/test_llm.py` | 11 unit, mock, and live Llama 3.2 end-to-end tests — all passing |
+| Interactive triage CLI | `tools/triage_cli.py` | Interactive terminal dashboard with Rich UI, SHAP horizontal bar charts, and JSON dump |
+| Triage CLI test suite | `tests/test_triage_cli.py` | 4 unit and UI rendering tests — all passing (37 total tests) |
 
 **Model performance** (XGBoost, held-out 20% test set):
 - Accuracy: ~99.9%  |  Weighted Recall: ~99.9%  |  Weighted F1: ~99.9%
@@ -188,6 +199,7 @@ python -m unittest discover tests
 | Explainability | SHAP (`TreeExplainer`) | ✅ |
 | Retrieval | ChromaDB · 107 chunks · `all-MiniLM-L6-v2` ONNX (offline) | ✅ |
 | LLM | Llama 3.2 via Ollama (local) | ✅ |
+| Triage UI | Rich (Terminal formatting, bar charts, JSON syntax highlighter) | ✅ |
 
 ---
 
@@ -199,7 +211,12 @@ axids/
 │   └── README.md               # Download instructions for CIC-IDS2017
 ├── explainability/
 │   └── explain.py              # SHAP TreeExplainer + predict_and_explain()
-├── llm/                        # [pending] LLM prompt + generation + alert assembly
+├── llm/
+│   ├── README.md               # LLM module documentation & alert schema
+│   ├── alert_builder.py        # build_alert() & process_flow_to_alert()
+│   ├── config.py               # Ollama connection & timeout configuration
+│   ├── ollama_client.py        # Robust localhost-guarded HTTP client
+│   └── prompts.py              # Two-pass grounded prompt templates
 ├── models/
 │   ├── train.py                # Training pipeline
 │   ├── evaluate.py             # Evaluation metrics + reports
@@ -213,6 +230,7 @@ axids/
 ├── preprocessing/
 │   └── preprocessing.py        # Load → clean → encode pipeline
 ├── rag/
+│   ├── README.md               # RAG module documentation
 │   ├── kb_parser.py            # Markdown KB parser, normalize_key, extract_urls
 │   ├── validate_kb.py          # Schema + model artifact alignment validator
 │   ├── build_index.py          # ChromaDB index builder + manifest writer
@@ -220,12 +238,16 @@ axids/
 │   ├── config.py               # Shared paths and constants (MAX_DISTANCE, etc.)
 │   ├── chroma_db/              # ChromaDB persistence dir (gitignored)
 │   ├── kb_manifest.json        # KB file hashes + chunk counts for staleness detection
-│   └── knowledge_base/         # Markdown KB source files
+│   └── kb/                     # Markdown KB source files
 │       ├── attack_profiles.md
 │       ├── mitigations.md
 │       └── feature_glossary.md
 ├── tests/
-│   └── test_rag.py              # 22 unit, integration, and end-to-end RAG tests
+│   ├── test_rag.py             # 22 unit, integration, and end-to-end RAG tests
+│   ├── test_llm.py             # 11 unit, mock, and live Llama 3.2 tests
+│   └── test_triage_cli.py      # 4 unit & rendering tests for triage CLI
+├── tools/
+│   └── triage_cli.py           # Interactive SOC triage console (Rich UI)
 ├── check_leakage.py            # Data leakage audit script
 ├── test_pipeline.py            # End-to-end integration test (models + SHAP)
 ├── requirements.txt
